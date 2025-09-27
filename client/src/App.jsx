@@ -2,26 +2,22 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
 function App() {
-  const [ingredientsByCategory, setIngredientsByCategory] = useState({});
+  const [ingredients, setIngredients] = useState([]);
   const [selectedIngredients, setSelectedIngredients] = useState([]);
   const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [expandedCategories, setExpandedCategories] = useState({});
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [showSearchResults, setShowSearchResults] = useState(false);
 
   useEffect(() => {
     const fetchIngredients = async () => {
       try {
         const response = await axios.get('http://localhost:5000/api/ingredients');
         if (typeof response.data === 'object' && response.data !== null) {
-          setIngredientsByCategory(response.data);
-          const categories = Object.keys(response.data);
-          const initialExpanded = {};
-          categories.slice(0, 3).forEach(cat => {
-            initialExpanded[cat] = true;
-          });
-          setExpandedCategories(initialExpanded);
+          const allIngredients = Object.values(response.data).flat();
+          setIngredients(allIngredients);
         } else {
           setError('Invalid data format received from the server.');
         }
@@ -33,25 +29,29 @@ function App() {
     fetchIngredients();
   }, []);
 
-  const handleIngredientToggle = (ingredient) => {
-    setSelectedIngredients(prev => {
-      if (prev.includes(ingredient)) {
-        return prev.filter(ing => ing !== ingredient);
-      } else {
-        return [...prev, ingredient];
-      }
-    });
+  useEffect(() => {
+    if (searchTerm) {
+      const filtered = ingredients.filter(ingredient =>
+        ingredient.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setSearchResults(filtered);
+      setShowSearchResults(true);
+    } else {
+      setSearchResults([]);
+      setShowSearchResults(false);
+    }
+  }, [searchTerm, ingredients]);
+
+  const handleSelectIngredient = (ingredient) => {
+    if (!selectedIngredients.includes(ingredient)) {
+      setSelectedIngredients(prev => [...prev, ingredient]);
+    }
+    setSearchTerm('');
+    setShowSearchResults(false);
   };
 
   const removeIngredient = (ingredient) => {
     setSelectedIngredients(prev => prev.filter(ing => ing !== ingredient));
-  };
-
-  const toggleCategory = (category) => {
-    setExpandedCategories(prev => ({
-      ...prev,
-      [category]: !prev[category]
-    }));
   };
 
   const findRecipes = async () => {
@@ -80,26 +80,12 @@ function App() {
     setRecipes([]);
   };
 
-  const filteredCategories = Object.entries(ingredientsByCategory).reduce((acc, [category, ingredients]) => {
-    if (!searchTerm) {
-      acc[category] = ingredients;
-    } else {
-      const filtered = ingredients.filter(ingredient => 
-        ingredient.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      if (filtered.length > 0) {
-        acc[category] = filtered;
-      }
-    }
-    return acc;
-  }, {});
-
   return (
     <div className="app-container">
       <header className="app-header">
         <div className="header-content">
           <div className="header-text-container">
-            <h1 className="app-title">My Fridge Food</h1>
+            <h1 className="app-title">MyTiffin</h1>
             <p className="app-subtitle">Find delicious recipes with ingredients you already have</p>
           </div>
         </div>
@@ -110,67 +96,38 @@ function App() {
           <div className="ingredients-card">
             <div className="panel-header">
               <h2 className="panel-title">Select Ingredients</h2>
-              <div className="search-container">
-                <span className="search-icon">🔍</span>
-                <input
-                  type="text"
-                  placeholder="Search ingredients..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="search-input"
-                />
-              </div>
             </div>
+            
+            <div className="search-container">
+              <span className="search-icon">&#128269;</span>
+              <input
+                type="text"
+                placeholder="Search ingredients..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="search-input"
+              />
+            </div>
+
+            {showSearchResults && searchResults.length > 0 && (
+              <div className="search-results-list">
+                {searchResults.map(ingredient => (
+                  <button 
+                    key={ingredient} 
+                    className="search-result-item" 
+                    onClick={() => handleSelectIngredient(ingredient)}
+                  >
+                    {ingredient}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {error && (
               <div className="error-message">
                 {error}
               </div>
             )}
-
-            <div className="ingredient-list-container">
-              {Object.entries(filteredCategories).map(([category, ingredients]) => (
-                <div key={category} className="category-group">
-                  <button
-                    onClick={() => toggleCategory(category)}
-                    className="category-button"
-                  >
-                    <span className="category-title">
-                      {category} ({ingredients.length})
-                    </span>
-                    {expandedCategories[category] ? 
-                      <span className="category-icon">▲</span> : 
-                      <span className="category-icon">▼</span>
-                    }
-                  </button>
-                  
-                  {expandedCategories[category] && (
-                    <div className="ingredient-checkboxes">
-                      <div className="ingredient-grid">
-                        {ingredients.map((ingredient) => (
-                          <label
-                            key={ingredient}
-                            className={`ingredient-label ${
-                              selectedIngredients.includes(ingredient)
-                                ? 'selected'
-                                : ''
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selectedIngredients.includes(ingredient)}
-                              onChange={() => handleIngredientToggle(ingredient)}
-                              className="ingredient-checkbox"
-                            />
-                            <span className="ingredient-name">{ingredient}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
           </div>
         </div>
 

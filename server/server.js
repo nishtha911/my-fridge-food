@@ -23,7 +23,6 @@ app.get('/', (req, res) => {
 
 app.get('/api/ingredients', async (req, res) => {
   try {
-    // Fetch all ingredients along with their category name
     const result = await pool.query(`
       SELECT
         i.name,
@@ -33,7 +32,6 @@ app.get('/api/ingredients', async (req, res) => {
       ORDER BY c.name ASC, i.name ASC;
     `);
 
-    // Group the ingredients by category
     const categorizedIngredients = {};
     result.rows.forEach(row => {
       const { name, category } = row;
