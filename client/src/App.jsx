@@ -85,7 +85,7 @@ function App() {
       <header className="app-header">
         <div className="header-content">
           <div className="header-text-container">
-            <h1 className="app-title">MyTiffin</h1>
+            <h1 className="app-title">MyRasoi</h1>
             <p className="app-subtitle">Find delicious recipes with ingredients you already have</p>
           </div>
         </div>
