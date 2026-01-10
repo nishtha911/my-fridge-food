@@ -14,7 +14,8 @@ function App() {
   useEffect(() => {
     const fetchIngredients = async () => {
       try {
-        const response = await axios.get('http://localhost:5000/api/ingredients');
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+        const response = await axios.get(`${apiUrl}/api/ingredients`);
         if (typeof response.data === 'object' && response.data !== null) {
           const allIngredients = Object.values(response.data).flat();
           setIngredients(allIngredients);
@@ -63,7 +64,8 @@ function App() {
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.post('http://localhost:5000/api/recipes', {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const response = await axios.post(`${apiUrl}/api/recipes`, {
         ingredients: selectedIngredients,
       });
       setRecipes(response.data);
