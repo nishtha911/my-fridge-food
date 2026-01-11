@@ -1,52 +1,80 @@
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
 const port = process.env.PORT || 5000;
 
+// Middleware
 app.use(cors());
 app.use(express.json());
 
+// Database Configuration
+// Uses DATABASE_URL (for Vercel/Neon) or individual variables (for Local pgAdmin)
+const isProduction = process.env.NODE_ENV === 'production';
+
 const pool = new Pool({
-  user: process.env.DB_USER,
-  host: process.env.DB_HOST,
-  database: process.env.DB_NAME,
-  password: process.env.DB_PASSWORD,
-  port: process.env.DB_PORT,
+  connectionString: process.env.DATABASE_URL || `postgresql://${process.env.DB_USER}:${process.env.DB_PASSWORD}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`,
+  ssl: isProduction ? { rejectUnauthorized: false } : false
 });
 
-app.get('/', (req, res) => {
-  res.send('Welcome to the My Fridge Food API!');
+// Test DB Connection
+pool.connect((err, client, release) => {
+  if (err) {
+    return console.error('Error acquiring client', err.stack);
+  }
+  console.log('Successfully connected to PostgreSQL');
+  release();
 });
+
+// --- API ROUTES ---
 
 app.get('/api/ingredients', async (req, res) => {
   try {
+    console.log("--- New Request to /api/ingredients ---");
+    
+    // Using LEFT JOIN so ingredients show up even if category_id is NULL
+    // Using LOWER() or exact names to avoid case-sensitivity issues
     const result = await pool.query(`
-      SELECT
-        i.name,
-        c.name AS category
+      SELECT 
+        i.name as ingredient_name, 
+        c.name as category_name
       FROM ingredients i
-      JOIN categories c ON i.category_id = c.id
+      LEFT JOIN categories c ON i.category_id = c.id
       ORDER BY c.name ASC, i.name ASC;
     `);
 
+    console.log(`Database returned ${result.rows.length} rows.`);
+
+    if (result.rows.length === 0) {
+      console.log("CHECK: The query returned 0 rows. Is the 'ingredients' table empty in this specific database?");
+      return res.json({});
+    }
+
     const categorizedIngredients = {};
     result.rows.forEach(row => {
-      const { name, category } = row;
+      // Use 'Uncategorized' if the join failed to find a category
+      const category = row.category_name || 'Uncategorized';
+      const name = row.ingredient_name;
+      
       if (!categorizedIngredients[category]) {
         categorizedIngredients[category] = [];
       }
       categorizedIngredients[category].push(name);
     });
 
+    console.log("Sending categorized data to frontend...");
     res.json(categorizedIngredients);
   } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server Error');
+    console.error("!!! DATABASE ERROR !!!");
+    console.error("Message:", err.message);
+    console.error("Hint: Check if table 'ingredients' or 'categories' exists and has these column names.");
+    res.status(500).json({ error: 'Server Error', details: err.message });
   }
 });
+
 
 app.post('/api/recipes', async (req, res) => {
   try {
@@ -58,6 +86,7 @@ app.post('/api/recipes', async (req, res) => {
 
     const ingredientNames = ingredients.map(ing => ing.toLowerCase());
 
+    // 1. Get IDs for the selected ingredients
     const ingredientIdQuery = `SELECT id FROM ingredients WHERE LOWER(name) = ANY($1)`;
     const ingredientResult = await pool.query(ingredientIdQuery, [ingredientNames]);
     const ingredientIds = ingredientResult.rows.map(row => row.id);
@@ -66,6 +95,7 @@ app.post('/api/recipes', async (req, res) => {
       return res.json([]); 
     }
 
+    // 2. Find recipes that contain ALL of the selected ingredients
     const recipeQuery = `
       SELECT r.*, COUNT(DISTINCT ri.ingredient_id) AS matching_ingredient_count
       FROM recipes r
@@ -79,11 +109,27 @@ app.post('/api/recipes', async (req, res) => {
 
     res.json(recipes.rows);
   } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server Error');
+    console.error("Recipe Search Error:", err.message);
+    res.status(500).json({ error: 'Server Error' });
   }
 });
 
+// Default API landing
+app.get('/api', (req, res) => {
+  res.send('MyRasoi API is running');
+});
+
+// --- DEPLOYMENT SETTINGS ---
+
+// Serve static files from the React app in production
+if (isProduction) {
+  app.use(express.static(path.join(__dirname, 'dist')));
+  
+  app.get('*', (req, res) => {
+    res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
+  });
+}
+
 app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
+  console.log(`Server is running on port ${port}`);
 });

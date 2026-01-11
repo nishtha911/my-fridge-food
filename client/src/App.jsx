@@ -11,30 +11,41 @@ function App() {
   const [searchResults, setSearchResults] = useState([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
 
+  // Fetch ingredients on component mount
   useEffect(() => {
     const fetchIngredients = async () => {
       try {
+        // This relative path is handled by the proxy in vite.config.js
         const response = await axios.get('/api/ingredients');
-        if (typeof response.data === 'object' && response.data !== null) {
+        
+        // Ensure data exists and is the categorized object format from server.js
+        if (response.data && typeof response.data === 'object' && Object.keys(response.data).length > 0) {
+          // Flatten the object { Category: [item1, item2] } into a single array for searching
           const allIngredients = Object.values(response.data).flat();
+          
+          console.log(`Successfully loaded ${allIngredients.length} ingredients.`);
           setIngredients(allIngredients);
+          setError(null);
         } else {
-          setError('Invalid data format received from the server.');
+          // If the DB returns an empty object
+          setIngredients([]);
+          console.warn('No ingredients found in the database response.');
         }
       } catch (err) {
-        setError('Failed to fetch ingredients.');
-        console.error(err);
+        setError('Failed to fetch ingredients from server.');
+        console.error('Fetch error:', err.message);
       }
     };
     fetchIngredients();
   }, []);
 
+  // Update search results whenever searchTerm or ingredients list changes
   useEffect(() => {
-    if (searchTerm) {
+    if (searchTerm.trim()) {
       const filtered = ingredients.filter(ingredient =>
         ingredient.toLowerCase().includes(searchTerm.toLowerCase())
       );
-      setSearchResults(filtered);
+      setSearchResults(filtered.slice(0, 50)); // Limit to top 50 for performance
       setShowSearchResults(true);
     } else {
       setSearchResults([]);
@@ -78,6 +89,7 @@ function App() {
   const clearAll = () => {
     setSelectedIngredients([]);
     setRecipes([]);
+    setError(null);
   };
 
   return (
@@ -102,7 +114,7 @@ function App() {
               <span className="search-icon">&#128269;</span>
               <input
                 type="text"
-                placeholder="Search ingredients..."
+                placeholder="Search 4000+ ingredients..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="search-input"
@@ -110,7 +122,7 @@ function App() {
             </div>
 
             {showSearchResults && searchResults.length > 0 && (
-              <div className="search-results-list">
+              <div className="search-results-list" style={{ maxHeight: '300px', overflowY: 'auto' }}>
                 {searchResults.map(ingredient => (
                   <button 
                     key={ingredient} 
@@ -124,7 +136,7 @@ function App() {
             )}
 
             {error && (
-              <div className="error-message">
+              <div className="error-message" style={{ color: '#d32f2f', padding: '10px' }}>
                 {error}
               </div>
             )}
@@ -149,7 +161,7 @@ function App() {
 
             {selectedIngredients.length === 0 ? (
               <p className="placeholder-text">
-                No ingredients selected yet. Choose some ingredients to get started!
+                No ingredients selected yet. Start searching to add some!
               </p>
             ) : (
               <>
@@ -218,13 +230,6 @@ function App() {
                         <span className="recipe-info-text">{recipe.total_time_in_mins} mins</span>
                       </div>
                     )}
-                    
-                    {recipe.ingredient_count && (
-                      <div className="recipe-info-item">
-                        <span className="recipe-info-icon">🍽️</span>
-                        <span className="recipe-info-text">{recipe.ingredient_count} ingredients</span>
-                      </div>
-                    )}
                   </div>
 
                   {recipe.url && (
@@ -234,7 +239,7 @@ function App() {
                       rel="noopener noreferrer"
                       className="recipe-link"
                     >
-                      View Recipe
+                      View Full Recipe
                     </a>
                   )}
                 </div>
@@ -244,13 +249,13 @@ function App() {
         </div>
       )}
 
-      {selectedIngredients.length > 0 && recipes.length === 0 && !loading && (
+      {selectedIngredients.length > 0 && recipes.length === 0 && !loading && !error && (
         <div className="no-recipes-found">
           <div className="no-recipes-card">
             <span className="chef-icon-large">👨‍🍳</span>
-            <h3 className="no-recipes-heading">No Recipes Found</h3>
+            <h3 className="no-recipes-heading">No Matches Yet</h3>
             <p className="no-recipes-text">
-              No recipes found with all selected ingredients. Try selecting different ingredients or fewer ingredients.
+              We couldn't find recipes matching all those ingredients. Try removing one or two!
             </p>
           </div>
         </div>
