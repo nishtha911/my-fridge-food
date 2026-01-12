@@ -1,267 +1,178 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import React, { useEffect, useState } from "react";
+
+const API = import.meta.env.VITE_API_URL;
 
 function App() {
-  const [ingredients, setIngredients] = useState([]);
-  const [selectedIngredients, setSelectedIngredients] = useState([]);
+  const [query, setQuery] = useState("");
+  const [suggestions, setSuggestions] = useState([]);
+  const [selected, setSelected] = useState(() => {
+    return JSON.parse(localStorage.getItem("ingredients")) || [];
+  });
   const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [showSearchResults, setShowSearchResults] = useState(false);
 
-  // Fetch ingredients on component mount
-    useEffect(() => {
-      const fetchIngredients = async () => {
-        try {
-          const response = await axios.get('/api/ingredients');
-          
-          console.log('Raw response:', response.data); // ADD THIS
-          console.log('Type:', typeof response.data); // ADD THIS
-          console.log('Keys:', Object.keys(response.data)); // ADD THIS
-          
-          if (response.data && typeof response.data === 'object' && Object.keys(response.data).length > 0) {
-            const allIngredients = Object.values(response.data).flat();
-            
-            console.log(`Successfully loaded ${allIngredients.length} ingredients.`);
-            console.log('First 10 ingredients:', allIngredients.slice(0, 10)); // ADD THIS
-            setIngredients(allIngredients);
-            setError(null);
-          } else {
-            setIngredients([]);
-            console.warn('No ingredients found in the database response.');
-            console.log('Response data was:', response.data); // ADD THIS
-          }
-        } catch (err) {
-          setError('Failed to fetch ingredients from server.');
-          console.error('Fetch error:', err.message);
-        }
-      };
-      fetchIngredients();
-    }, []);
-
-  // Update search results whenever searchTerm or ingredients list changes
+  /* ---------------- SEARCH INGREDIENTS ---------------- */
   useEffect(() => {
-    if (searchTerm.trim()) {
-      const filtered = ingredients.filter(ingredient =>
-        ingredient.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setSearchResults(filtered.slice(0, 50)); // Limit to top 50 for performance
-      setShowSearchResults(true);
-    } else {
-      setSearchResults([]);
-      setShowSearchResults(false);
-    }
-  }, [searchTerm, ingredients]);
-
-  const handleSelectIngredient = (ingredient) => {
-    if (!selectedIngredients.includes(ingredient)) {
-      setSelectedIngredients(prev => [...prev, ingredient]);
-    }
-    setSearchTerm('');
-    setShowSearchResults(false);
-  };
-
-  const removeIngredient = (ingredient) => {
-    setSelectedIngredients(prev => prev.filter(ing => ing !== ingredient));
-  };
-
-  const findRecipes = async () => {
-    if (selectedIngredients.length === 0) {
-      setError('Please select at least one ingredient');
+    if (!query) {
+      setSuggestions([]);
       return;
     }
 
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await axios.post('/api/recipes', {
-        ingredients: selectedIngredients,
-      });
-      setRecipes(response.data);
-    } catch (err) {
-      setError('Failed to fetch recipes.');
-      console.error(err);
-    } finally {
-      setLoading(false);
+    fetch(`${API}/ingredients?query=${query}`)
+      .then((res) => res.json())
+      .then((data) => {
+  if (Array.isArray(data)) {
+      setSuggestions(data);
+    } else {
+      setSuggestions([]);
     }
+});
+
+  }, [query]);
+
+  /* ---------------- PERSIST ---------------- */
+  useEffect(() => {
+    localStorage.setItem("ingredients", JSON.stringify(selected));
+  }, [selected]);
+
+  /* ---------------- ADD INGREDIENT ---------------- */
+  const addIngredient = (ing) => {
+    if (selected.find((i) => i.id === ing.id)) return;
+    setSelected([...selected, ing]);
+    setQuery("");
+    setSuggestions([]);
   };
 
-  const clearAll = () => {
-    setSelectedIngredients([]);
-    setRecipes([]);
-    setError(null);
+  /* ---------------- REMOVE INGREDIENT ---------------- */
+  const removeIngredient = (id) => {
+    setSelected(selected.filter((i) => i.id !== id));
+  };
+
+  /* ---------------- FIND RECIPES ---------------- */
+  const findRecipes = async () => {
+    setLoading(true);
+
+    const res = await fetch(`${API}/match-recipes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ingredients: selected.map((i) => i.id),
+      }),
+    });
+
+    const data = await res.json();
+    setRecipes(data);
+    setLoading(false);
   };
 
   return (
     <div className="app-container">
       <header className="app-header">
-        <div className="header-content">
-          <div className="header-text-container">
-            <h1 className="app-title">MyRasoi</h1>
-            <p className="app-subtitle">Find delicious recipes with ingredients you already have</p>
-          </div>
-        </div>
+        <h1 className="app-title">My Fridge Food</h1>
+        <p className="app-subtitle">
+          Find Indian recipes from ingredients you have
+        </p>
       </header>
 
       <div className="main-content-container">
+        {/* INGREDIENT SEARCH */}
         <div className="ingredients-panel">
           <div className="ingredients-card">
-            <div className="panel-header">
-              <h2 className="panel-title">Select Ingredients</h2>
-            </div>
-            
-            <div className="search-container">
-              <span className="search-icon">&#128269;</span>
-              <input
-                type="text"
-                placeholder="Search 4000+ ingredients..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="search-input"
-              />
-            </div>
+            <h3 className="panel-title">Ingredients</h3>
 
-            {showSearchResults && searchResults.length > 0 && (
-              <div className="search-results-list" style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                {searchResults.map(ingredient => (
-                  <button 
-                    key={ingredient} 
-                    className="search-result-item" 
-                    onClick={() => handleSelectIngredient(ingredient)}
-                  >
-                    {ingredient}
-                  </button>
-                ))}
-              </div>
-            )}
+            <input
+              className="search-input"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Type ingredient..."
+            />
 
-            {error && (
-              <div className="error-message" style={{ color: '#d32f2f', padding: '10px' }}>
-                {error}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="recipes-panel">
-          <div className="recipes-card">
-            <div className="panel-header">
-              <h3 className="panel-title">
-                Selected ({selectedIngredients.length})
-              </h3>
-              {selectedIngredients.length > 0 && (
-                <button
-                  onClick={clearAll}
-                  className="clear-button"
+            <div className="ingredients-list">
+          {Array.isArray(suggestions) && suggestions.map((ing) => (
+                <div
+                  key={ing.id}
+                  className="ingredient-item"
+                  onClick={() => addIngredient(ing)}
                 >
-                  Clear All
-                </button>
-              )}
-            </div>
-
-            {selectedIngredients.length === 0 ? (
-              <p className="placeholder-text">
-                No ingredients selected yet. Start searching to add some!
-              </p>
-            ) : (
-              <>
-                <div className="selected-ingredients-list">
-                  {selectedIngredients.map((ingredient) => (
-                    <div
-                      key={ingredient}
-                      className="selected-ingredient-item"
-                    >
-                      <span className="selected-ingredient-name">{ingredient}</span>
-                      <button
-                        onClick={() => removeIngredient(ingredient)}
-                        className="remove-ingredient-button"
-                      >
-                        <span className="remove-icon">✕</span>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-
-                <button
-                  onClick={findRecipes}
-                  disabled={loading}
-                  className="find-recipes-button"
-                >
-                  {loading ? (
-                    <div className="loading-state">
-                      <div className="spinner"></div>
-                      Finding Recipes...
-                    </div>
-                  ) : (
-                    <div className="button-content">
-                      <span className="chef-icon">👨‍🍳</span>
-                      Find Recipes
-                    </div>
-                  )}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {recipes.length > 0 && (
-        <div className="recipes-section">
-          <div className="recipes-list-container">
-            <h2 className="recipes-heading">
-              Available Recipes ({recipes.length})
-            </h2>
-            <div className="recipe-grid">
-              {recipes.map((recipe) => (
-                <div key={recipe.id} className="recipe-card">
-                  <h3 className="recipe-name">{recipe.name}</h3>
-                  
-                  <div className="recipe-info-group">
-                    {recipe.cuisine && (
-                      <div className="recipe-info-item">
-                        <span className="recipe-info-icon">🌐</span>
-                        <span className="recipe-info-text">{recipe.cuisine}</span>
-                      </div>
-                    )}
-                    
-                    {recipe.total_time_in_mins && (
-                      <div className="recipe-info-item">
-                        <span className="recipe-info-icon">⏰</span>
-                        <span className="recipe-info-text">{recipe.total_time_in_mins} mins</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {recipe.url && (
-                    <a
-                      href={recipe.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="recipe-link"
-                    >
-                      View Full Recipe
-                    </a>
-                  )}
+                  {ing.name}
                 </div>
               ))}
             </div>
           </div>
         </div>
-      )}
 
-      {selectedIngredients.length > 0 && recipes.length === 0 && !loading && !error && (
-        <div className="no-recipes-found">
-          <div className="no-recipes-card">
-            <span className="chef-icon-large">👨‍🍳</span>
-            <h3 className="no-recipes-heading">No Matches Yet</h3>
-            <p className="no-recipes-text">
-              We couldn't find recipes matching all those ingredients. Try removing one or two!
-            </p>
+        {/* SELECTED INGREDIENTS */}
+        <div className="selected-panel">
+          <div className="selected-card">
+            <h3 className="panel-title">Selected Ingredients</h3>
+
+            <div className="selected-ingredients-list">
+              {selected.map((ing) => (
+                <div key={ing.id} className="selected-ingredient-item">
+                  {ing.name}
+                  <button
+                    className="remove-ingredient-button"
+                    onClick={() => removeIngredient(ing.id)}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <button
+              className="find-recipes-button"
+              disabled={selected.length === 0 || loading}
+              onClick={findRecipes}
+            >
+              {loading ? "Finding..." : "Find Recipes"}
+            </button>
           </div>
         </div>
-      )}
+      </div>
+
+      {/* RECIPES */}
+      <section className="recipes-section">
+        {selected.length === 0 ? (
+          <p className="placeholder-text">
+            Select ingredients to see recipes
+          </p>
+        ) : recipes.length === 0 ? (
+          <div className="no-recipes-found">
+            <div className="no-recipes-card">
+              <p className="no-recipes-text">No recipes found</p>
+            </div>
+          </div>
+        ) : (
+          <div className="recipe-grid">
+            {recipes.map((r) => (
+              <div key={r.id} className="recipe-card">
+                <h3 className="recipe-name">{r.name}</h3>
+
+                <div className="recipe-info-group">
+                  <span className="recipe-info-item">
+                    🍽 {r.cuisine}
+                  </span>
+                  <span className="recipe-info-item">
+                    ⏱ {r.total_time} mins
+                  </span>
+                  <span className="recipe-info-item">
+                    ❌ Missing {r.missing_count}
+                  </span>
+                </div>
+
+                <a
+                  href={r.url}
+                  target="_blank"
+                  className="recipe-link"
+                >
+                  View Recipe
+                </a>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

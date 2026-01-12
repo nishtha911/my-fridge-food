@@ -1,104 +1,103 @@
-const express = require('express');
-const cors = require('cors');
-const { Pool } = require('pg');
-const path = require('path');
-require('dotenv').config();
+import express from "express";
+import cors from "cors";
+import pkg from "pg";
+import dotenv from "dotenv";
 
+dotenv.config();
+
+const { Pool } = pkg;
 const app = express();
-const port = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5000;
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 
-// Database Configuration
-// Uses DATABASE_URL (for Vercel/Neon) or individual variables (for Local pgAdmin)
-const isProduction = process.env.NODE_ENV === 'production';
-
+/* ---------------- DB CONNECTION ---------------- */
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || `postgresql://${process.env.DB_USER}:${process.env.DB_PASSWORD}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`,
-  ssl: isProduction ? { rejectUnauthorized: false } : false
+  user: process.env.DB_USER,
+  host: process.env.DB_HOST,
+  database: process.env.DB_NAME,
+  password: process.env.DB_PASSWORD,
+  port: process.env.DB_PORT,
 });
 
-// Test DB Connection
-pool.connect((err, client, release) => {
-  if (err) {
-    return console.error('Error acquiring client', err.stack);
-  }
-  console.log('Successfully connected to PostgreSQL');
-  release();
-});
 
-// --- API ROUTES ---
+/* ---------------- INGREDIENT SEARCH ---------------- */
+/*
+GET /ingredients?query=to
+returns top 10 ingredients (starts-with)
+*/
+app.get("/ingredients", async (req, res) => {
+  const { query } = req.query;
 
-aapp.get('/api/test-db', async (req, res) => {
+  if (!query) return res.json([]);
+
   try {
-    const count = await pool.query('SELECT COUNT(*) FROM ingredients');
-    const sample = await pool.query('SELECT * FROM ingredients LIMIT 5');
-    res.json({
-      total_ingredients: count.rows[0].count,
-      sample: sample.rows
-    });
+    const result = await pool.query(
+      `
+      SELECT id, name
+      FROM ingredients
+      WHERE name ILIKE $1
+      ORDER BY name
+      LIMIT 10
+      `,
+      [`${query}%`]
+    );
+
+    res.json(result.rows);
   } catch (err) {
+    console.error("INGREDIENT SEARCH ERROR:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
+/* ---------------- RECIPE MATCHING ---------------- */
+/*
+POST /match-recipes
+body: { ingredients: [1, 5, 9] }
+*/
+app.post("/match-recipes", async (req, res) => {
+  const { ingredients } = req.body;
 
-app.post('/api/recipes', async (req, res) => {
+  if (!ingredients || ingredients.length === 0) {
+    return res.json([]);
+  }
+
   try {
-    const { ingredients } = req.body;
-
-    if (!ingredients || ingredients.length === 0) {
-      return res.status(400).json({ message: 'No ingredients provided' });
-    }
-
-    const ingredientNames = ingredients.map(ing => ing.toLowerCase());
-
-    // 1. Get IDs for the selected ingredients
-    const ingredientIdQuery = `SELECT id FROM ingredients WHERE LOWER(name) = ANY($1)`;
-    const ingredientResult = await pool.query(ingredientIdQuery, [ingredientNames]);
-    const ingredientIds = ingredientResult.rows.map(row => row.id);
-
-    if (ingredientIds.length === 0) {
-      return res.json([]); 
-    }
-
-    // 2. Find recipes that contain ALL of the selected ingredients
-    const recipeQuery = `
-      SELECT r.*, COUNT(DISTINCT ri.ingredient_id) AS matching_ingredient_count
+    const result = await pool.query(
+      `
+      SELECT
+        r.id,
+        r.name,
+        r.cuisine,
+        r.total_time,
+        r.url,
+        r.ingredient_count,
+        COUNT(ri.ingredient_id) AS matched_count
       FROM recipes r
       JOIN recipe_ingredients ri ON r.id = ri.recipe_id
       WHERE ri.ingredient_id = ANY($1)
       GROUP BY r.id
-      HAVING COUNT(DISTINCT ri.ingredient_id) = $2
-      ORDER BY r.ingredient_count ASC;
-    `;
-    const recipes = await pool.query(recipeQuery, [ingredientIds, ingredientIds.length]);
+      ORDER BY
+        (r.ingredient_count - COUNT(ri.ingredient_id)) ASC,
+        COUNT(ri.ingredient_id) DESC
+      `,
+      [ingredients]
+    );
 
-    res.json(recipes.rows);
+    const recipes = result.rows.map((r) => ({
+      ...r,
+      missing_count: r.ingredient_count - r.matched_count,
+    }));
+
+    res.json(recipes);
   } catch (err) {
-    console.error("Recipe Search Error:", err.message);
-    res.status(500).json({ error: 'Server Error' });
+    console.error(err);
+    res.status(500).json({ error: "Recipe matching failed" });
   }
 });
 
-// Default API landing
-app.get('/api', (req, res) => {
-  res.send('MyRasoi API is running');
-});
-
-// --- DEPLOYMENT SETTINGS ---
-
-// Serve static files from the React app in production
-if (isProduction) {
-  app.use(express.static(path.join(__dirname, 'dist')));
-  
-  app.get('*', (req, res) => {
-    res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
-  });
-}
-
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
+/* ---------------- SERVER START ---------------- */
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
