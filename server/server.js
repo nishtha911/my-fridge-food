@@ -31,47 +31,16 @@ pool.connect((err, client, release) => {
 
 // --- API ROUTES ---
 
-app.get('/api/ingredients', async (req, res) => {
+aapp.get('/api/test-db', async (req, res) => {
   try {
-    console.log("--- New Request to /api/ingredients ---");
-    
-    // Using LEFT JOIN so ingredients show up even if category_id is NULL
-    // Using LOWER() or exact names to avoid case-sensitivity issues
-    const result = await pool.query(`
-      SELECT 
-        i.name as ingredient_name, 
-        c.name as category_name
-      FROM ingredients i
-      LEFT JOIN categories c ON i.category_id = c.id
-      ORDER BY c.name ASC, i.name ASC;
-    `);
-
-    console.log(`Database returned ${result.rows.length} rows.`);
-
-    if (result.rows.length === 0) {
-      console.log("CHECK: The query returned 0 rows. Is the 'ingredients' table empty in this specific database?");
-      return res.json({});
-    }
-
-    const categorizedIngredients = {};
-    result.rows.forEach(row => {
-      // Use 'Uncategorized' if the join failed to find a category
-      const category = row.category_name || 'Uncategorized';
-      const name = row.ingredient_name;
-      
-      if (!categorizedIngredients[category]) {
-        categorizedIngredients[category] = [];
-      }
-      categorizedIngredients[category].push(name);
+    const count = await pool.query('SELECT COUNT(*) FROM ingredients');
+    const sample = await pool.query('SELECT * FROM ingredients LIMIT 5');
+    res.json({
+      total_ingredients: count.rows[0].count,
+      sample: sample.rows
     });
-
-    console.log("Sending categorized data to frontend...");
-    res.json(categorizedIngredients);
   } catch (err) {
-    console.error("!!! DATABASE ERROR !!!");
-    console.error("Message:", err.message);
-    console.error("Hint: Check if table 'ingredients' or 'categories' exists and has these column names.");
-    res.status(500).json({ error: 'Server Error', details: err.message });
+    res.status(500).json({ error: err.message });
   }
 });
 

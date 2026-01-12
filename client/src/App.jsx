@@ -12,32 +12,34 @@ function App() {
   const [showSearchResults, setShowSearchResults] = useState(false);
 
   // Fetch ingredients on component mount
-  useEffect(() => {
-    const fetchIngredients = async () => {
-      try {
-        // This relative path is handled by the proxy in vite.config.js
-        const response = await axios.get('/api/ingredients');
-        
-        // Ensure data exists and is the categorized object format from server.js
-        if (response.data && typeof response.data === 'object' && Object.keys(response.data).length > 0) {
-          // Flatten the object { Category: [item1, item2] } into a single array for searching
-          const allIngredients = Object.values(response.data).flat();
+    useEffect(() => {
+      const fetchIngredients = async () => {
+        try {
+          const response = await axios.get('/api/ingredients');
           
-          console.log(`Successfully loaded ${allIngredients.length} ingredients.`);
-          setIngredients(allIngredients);
-          setError(null);
-        } else {
-          // If the DB returns an empty object
-          setIngredients([]);
-          console.warn('No ingredients found in the database response.');
+          console.log('Raw response:', response.data); // ADD THIS
+          console.log('Type:', typeof response.data); // ADD THIS
+          console.log('Keys:', Object.keys(response.data)); // ADD THIS
+          
+          if (response.data && typeof response.data === 'object' && Object.keys(response.data).length > 0) {
+            const allIngredients = Object.values(response.data).flat();
+            
+            console.log(`Successfully loaded ${allIngredients.length} ingredients.`);
+            console.log('First 10 ingredients:', allIngredients.slice(0, 10)); // ADD THIS
+            setIngredients(allIngredients);
+            setError(null);
+          } else {
+            setIngredients([]);
+            console.warn('No ingredients found in the database response.');
+            console.log('Response data was:', response.data); // ADD THIS
+          }
+        } catch (err) {
+          setError('Failed to fetch ingredients from server.');
+          console.error('Fetch error:', err.message);
         }
-      } catch (err) {
-        setError('Failed to fetch ingredients from server.');
-        console.error('Fetch error:', err.message);
-      }
-    };
-    fetchIngredients();
-  }, []);
+      };
+      fetchIngredients();
+    }, []);
 
   // Update search results whenever searchTerm or ingredients list changes
   useEffect(() => {
