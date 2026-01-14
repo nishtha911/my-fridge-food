@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-/* ---------------- DB CONNECTION ---------------- */
+// db connection
 const pool = new Pool({
   user: process.env.DB_USER,
   host: process.env.DB_HOST,
@@ -22,7 +22,7 @@ const pool = new Pool({
 });
 
 
-/* ---------------- INGREDIENT SEARCH ---------------- */
+// ---------------- INGREDIENT SEARCH ----------------
 /*
 GET /ingredients?query=to
 returns top 10 ingredients (starts-with)
