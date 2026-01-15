@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// db connection
+// ---------------- DB CONNECTION ----------------
 const pool = new Pool({
   user: process.env.DB_USER,
   host: process.env.DB_HOST,
@@ -21,15 +21,9 @@ const pool = new Pool({
   port: process.env.DB_PORT,
 });
 
-
 // ---------------- INGREDIENT SEARCH ----------------
-/*
-GET /ingredients?query=to
-returns top 10 ingredients (starts-with)
-*/
 app.get("/ingredients", async (req, res) => {
   const { query } = req.query;
-
   if (!query) return res.json([]);
 
   try {
@@ -46,58 +40,57 @@ app.get("/ingredients", async (req, res) => {
 
     res.json(result.rows);
   } catch (err) {
-    console.error("INGREDIENT SEARCH ERROR:", err.message);
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: "Ingredient search failed" });
   }
 });
 
-/* ---------------- RECIPE MATCHING ---------------- */
-/*
-POST /match-recipes
-body: { ingredients: [1, 5, 9] }
-*/
+// ---------------- RECIPE MATCHING ----------------
 app.post("/match-recipes", async (req, res) => {
   const { ingredients } = req.body;
-
-  if (!ingredients || ingredients.length === 0) {
-    return res.json([]);
-  }
+  if (!ingredients || ingredients.length === 0) return res.json([]);
 
   try {
     const result = await pool.query(
       `
-      SELECT
-        r.id,
-        r.name,
-        r.cuisine,
-        r.total_time,
-        r.url,
-        r.ingredient_count,
-        COUNT(ri.ingredient_id) AS matched_count
-      FROM recipes r
-      JOIN recipe_ingredients ri ON r.id = ri.recipe_id
-      WHERE ri.ingredient_id = ANY($1)
-      GROUP BY r.id
-      ORDER BY
-        (r.ingredient_count - COUNT(ri.ingredient_id)) ASC,
-        COUNT(ri.ingredient_id) DESC
+      WITH selected_ingredients AS (
+        SELECT name
+        FROM ingredients
+        WHERE id = ANY($1)
+      ),
+      matched AS (
+        SELECT
+          r.id,
+          r.name,
+          r.cuisine,
+          r.total_time,
+          r.url,
+          r.ingredient_count,
+          COUNT(*) AS matched_count
+        FROM recipe_ingredient_raw rir
+        JOIN selected_ingredients si
+          ON rir.ingredient_name ILIKE '%' || si.name || '%'
+        JOIN recipes r
+          ON r.name = rir.recipe_name
+        GROUP BY r.id
+      )
+      SELECT *,
+        (ingredient_count - matched_count) AS missing_count
+      FROM matched
+      ORDER BY missing_count ASC, matched_count DESC
+      LIMIT 50;
       `,
       [ingredients]
     );
 
-    const recipes = result.rows.map((r) => ({
-      ...r,
-      missing_count: r.ingredient_count - r.matched_count,
-    }));
-
-    res.json(recipes);
+    res.json(result.rows);
   } catch (err) {
-    console.error(err);
+    console.error("MATCH ERROR:", err.message);
     res.status(500).json({ error: "Recipe matching failed" });
   }
 });
 
-/* ---------------- SERVER START ---------------- */
+// ---------------- SERVER START ----------------
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
