@@ -68,7 +68,7 @@ function App() {
   return (
     <div className="app-container">
       <header className="app-header">
-        <h1 className="app-title">My Fridge Food</h1>
+        <h1 className="app-title">MyRasoi</h1>
         <p className="app-subtitle">
           Find Indian recipes from ingredients you have
         </p>
