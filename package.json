@@ -1,0 +1,13 @@
+{
+  "name": "my-fridge-food",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build": "cd client && npm install && npm run build",
+    "start": "node server/server.js",
+    "start:dev": "cd server && nodemon server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

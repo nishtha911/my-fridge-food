@@ -2,6 +2,8 @@ import express from "express";
 import cors from "cors";
 import pkg from "pg";
 import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
 
 dotenv.config();
 
@@ -91,6 +93,29 @@ app.post("/match-recipes", async (req, res) => {
 });
 
 // ---------------- SERVER START ----------------
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// Serve client build when running in production or when explicitly requested
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const clientDist = path.join(__dirname, "..", "client", "dist");
+
+try {
+  // If a built client exists, serve it
+  app.use(express.static(clientDist));
+  app.get("*", (req, res) => {
+    res.sendFile(path.join(clientDist, "index.html"));
+  });
+} catch (e) {
+  // ignore if dist doesn't exist
+}
+
+// Export a handler for serverless platforms (Vercel, etc.)
+export default function handler(req, res) {
+  app(req, res);
+}
+
+// Start the server when running as a standalone process (not on serverless platforms)
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
